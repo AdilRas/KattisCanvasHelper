@@ -9,7 +9,7 @@ from models.Session import Session
 
 
 class Student:
-    # "username": "aditya-trivedi", "name": "Aditya Trivedi", "non_anonymous": "t", "email": "atriv20@tamu.edu"
+    # "username": "kattis-user", "name": "Kattis User", "non_anonymous": "t", "email": "kattisuser@tamu.edu"
     def __init__(self, kattis_username: str, name: str, visible_name: str, email: str):
         self.kattis_username = kattis_username
         self.canvas_name: str = ''
