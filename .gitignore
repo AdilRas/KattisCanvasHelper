@@ -1,3 +1,7 @@
 /venv
 /env
 /.idea
+*.csv
+*.json
+*.data
+.DS_Store
