@@ -13,8 +13,8 @@ import json
 log.addLevelName(log.WARNING, "\033[1;31m%s\033[1;0m" % log.getLevelName(log.WARNING))
 log.addLevelName(log.ERROR, "\033[1;41m%s\033[1;0m" % log.getLevelName(log.ERROR))
 
-KATTIS_JSON = 'CSCE430-2023Spring_export.json'
-CANVAS_CSV_PATH = '2023-04-06T0007_Grades-CSCE-430 200,500.csv'
+KATTIS_JSON = ''
+CANVAS_CSV_PATH = ''
 CACHE_FOLDER = 'cache'
 
 
