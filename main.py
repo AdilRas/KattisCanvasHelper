@@ -1,33 +1,24 @@
 import logging as log
 import re
-from typing import List, Dict, Set
+from typing import Dict, Set
 
+import numpy
 import pandas as pd
 
 import util.Caching
-from models.Session import Session
 from models.Student import Student
 from util import Input
-import json
 
 log.addLevelName(log.WARNING, "\033[1;31m%s\033[1;0m" % log.getLevelName(log.WARNING))
 log.addLevelName(log.ERROR, "\033[1;41m%s\033[1;0m" % log.getLevelName(log.ERROR))
 
-KATTIS_JSON = ''
-CANVAS_CSV_PATH = ''
+# Feel free to change these
+KATTIS_JSON = 'CSCE430-2023Spring_export.json'
+CANVAS_CSV_PATH = '2023-04-06T0007_Grades-CSCE-430 200,500.csv'
+LOGGING_LEVEL = log.ERROR
+
+# Probably don't change this one
 CACHE_FOLDER = 'cache'
-
-
-def load_kattis_info() -> [Dict[str, Student], List[Session]]:
-    student_json_filepath = KATTIS_JSON if len(KATTIS_JSON) > 0 else Input.get_filename("Kattis JSON Dump")
-
-    with open(student_json_filepath, "r") as kattis_dump_file:
-        kattis_json = json.load(kattis_dump_file)
-        students: Dict[str, Student] = {student.kattis_username: student for student in
-                                        Student.parse_kattis_students(kattis_json)}
-        sessions: List[Session] = Session.parse_kattis_sessions(kattis_json)
-
-    return [students, sessions]
 
 
 def populate_honors(students: Dict[str, Student], canvas_df: pd.DataFrame):
@@ -53,9 +44,11 @@ def clear_honors_points(student_dict: Dict[str, Student]):
 
 
 def main():
-    log.basicConfig(level=log.WARNING)
+    # If there's unintended behavior, you can enable full logging to get an idea for what's going on under the hood.
 
-    student_dict, sessions = load_kattis_info()
+    log.basicConfig(level=LOGGING_LEVEL)
+
+    student_dict, sessions = Input.load_kattis_info(KATTIS_JSON)
 
     # For each student, use the kattis info to compute a map [problem name -> score]
     # where score is 1 for solves and 0.5 for up-solves.
@@ -65,7 +58,8 @@ def main():
     canvas_csv_filepath = CANVAS_CSV_PATH if len(CANVAS_CSV_PATH) > 0 \
         else Input.get_filename("Complete Canvas Gradebook Export")
 
-    canvas_df = pd.read_csv(canvas_csv_filepath)
+    canvas_df = Input.load_canvas_info(canvas_csv_filepath)
+    original_df = canvas_df.copy(deep=True)
 
     canvas_util = util.Input.CanvasUtil(canvas_df, CACHE_FOLDER)
     # for each student, find and set their name in canvas
@@ -78,25 +72,35 @@ def main():
     clear_honors_points(student_dict)
 
     Student.set_canvas_row_indices(student_dict, canvas_df)
-
     # Compute Grades
     canvas_util.populate_grades(student_dict, sessions)
 
-    canvas_util.canvas_df.to_csv('output.csv', index=False)
+    canvas_util.canvas_df.to_csv('output.csv', index=False, quotechar='"')
+    print("Saved results to output.csv")
 
     # Sanity Check
-    original_df = pd.read_csv(canvas_csv_filepath)
-    original_df = original_df[original_df.select_dtypes(include=['number']).columns].fillna(0)
-
+    print("Running sanity check...")
+    # original_df = original_df[original_df.select_dtypes(include=['number']).columns].fillna(0)
+    discrepancy_count = 0
     for col in sorted(list(canvas_util.canvas_pset_names)):
-        if canvas_df[col].sum() == 0 or original_df[col].sum() == 0:
+        if original_df[col].sum() == 0 or 'base' in col.lower():
             # Grades have not been entered in this column yet, so we don't check for discrepancies
             continue
         for _, student in student_dict.items():
             if student.canvas_index != -1:
+                if numpy.isnan(canvas_df.at[student.canvas_index, col]) and numpy.isnan(original_df.at[student.canvas_index, col]):
+                    continue
                 if canvas_df.at[student.canvas_index, col] != original_df.at[student.canvas_index, col]:
-                    log.warning(f"Discrepancy: {col}::{student.canvas_name} Canvas score of {original_df.at[student.canvas_index, col]}"
-                                f" but computed score is {canvas_df.at[student.canvas_index, col]}")
+                    discrepancy_count += 1
+                    log.warning(
+                        f"Discrepancy: {col}::{student.canvas_name} Canvas score of {original_df.at[student.canvas_index, col]}"
+                        f" but computed score is {canvas_df.at[student.canvas_index, col]}"
+                    )
+    if LOGGING_LEVEL == log.ERROR:
+        print(f"Found {discrepancy_count} discrepancies. Set LOGGING_LEVEl to log.WARNING and run the program again "
+              f"to see them...")
+
+    print("All done! Terminating...")
 
 
 main()

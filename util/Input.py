@@ -1,3 +1,4 @@
+import json
 import os
 from collections import defaultdict
 from typing import Dict, List, Set, Optional
@@ -29,6 +30,50 @@ def get_filename(file_objective: str, sys_arg: str = '') -> str:
         print(f'No file found at {file}!')
 
     return file
+
+
+def load_kattis_info(filepath='') -> [Dict[str, Student], List[Session]]:
+    student_json_filepath = filepath if len(filepath) > 0 else get_filename("Kattis JSON Dump")
+    print("Loading Kattis info...", end=' ')
+    try:
+        with open(student_json_filepath, "r") as kattis_dump_file:
+            log.info(f"main::load_kattis_info: Loaded file at '{student_json_filepath}'; parsing JSON...")
+            try:
+                kattis_json = json.load(kattis_dump_file)
+            except Exception as e:
+                log.error(f"Failed to parse '{student_json_filepath}' as json.")
+                exit()
+
+            students: Dict[str, Student] = {student.kattis_username: student for student in
+                                            Student.parse_kattis_students(kattis_json)}
+            sessions: List[Session] = Session.parse_kattis_sessions(kattis_json)
+    except FileNotFoundError as _:
+        log.error(f"File not found at {student_json_filepath}")
+        exit()
+    except Exception as _:
+        log.error("Failed to Parse Kattis JSON. Please ensure the path to the intended file was provided.")
+        exit()
+
+    print("Done!")
+    return [students, sessions]
+
+
+def load_canvas_info(filepath: str):
+    print("Loading Canvas Grade Book...", end=' ')
+    try:
+        canvas_df = pd.read_csv(filepath)
+    except FileNotFoundError as _:
+        log.error(f"No file found at '{filepath}'")
+        exit()
+    except PermissionError as _:
+        log.error(f"Insufficient permissions to read file at '{filepath}'")
+        exit()
+    except Exception as e:
+        log.error(f"Unknown error occurred attempting to read file at '{filepath}': '{str(e)}'")
+        exit()
+
+    print("Done!")
+    return canvas_df
 
 
 class CanvasUtil:
@@ -125,20 +170,23 @@ class CanvasUtil:
                     log.info(f"Matched Kattis Session {session.name} to {canvas_col}")
                     break
 
-    def populate_grades(self, student_dict: Dict[str, Student], sessions: Set[str]):
+    def populate_grades(self, student_dict: Dict[str, Student], sessions: List[Session]):
+        print("Computing scores...", end=' ')
         # finally, for each session, compute the score for a given student and update the dataframe
         for col in self.canvas_pset_names:
             is_upsolve: bool = 'upsolve' in col.lower()
             # there might be multiple kattis sessions (like redos, extensions) that count in a given column..
-            associated_kattis_sessions = set(
+            associated_kattis_sessions: Set[Session] = set(
                 filter(
                     lambda sess: sess.canvas_name == col,
                     sessions
                 )
             )
+            if self.canvas_df[col].count() > 1:
+                continue
             if len(associated_kattis_sessions) > 1:
-                log.info("Found multiple sessions for " + col)
-                log.info([s.name for s in associated_kattis_sessions])
+                log.debug("Found multiple sessions for " + col)
+                log.debug([s.name for s in associated_kattis_sessions])
             # for each student, set their score for this column.
             for _, student in student_dict.items():
                 if student.canvas_index == -1:
@@ -149,6 +197,8 @@ class CanvasUtil:
                         if (is_upsolve and student.problems_solved[problem] == 0.5) or \
                                 (not is_upsolve and student.problems_solved[problem] == 1):
                             session_solved.add(problem)
-                self.canvas_df.at[student.canvas_index, col] = len(session_solved)
+                if len(session_solved) > 0:
+                    self.canvas_df.at[student.canvas_index, col] = len(session_solved)
 
-        self.canvas_df = self.canvas_df[self.canvas_df.select_dtypes(include=['number']).columns].fillna(0)
+        # self.canvas_df[self.canvas_df.select_dtypes(include=['number']).columns] = self.canvas_df[self.canvas_df.select_dtypes(include=['number']).columns].fillna(0)
+        print("Done!")

@@ -59,6 +59,6 @@ class Student:
                 student.canvas_index = student_index
             except Exception as e:
                 log.warning(e)
-                print(f"Note: Failed to find {student.name} from Kattis in Canvas as '{student.canvas_name}'. "
+                log.warning(f"Note: Failed to find {student.name} from Kattis in Canvas as '{student.canvas_name}'. "
                       f"This may happen when a student q-drops or changes name in Canvas. "
                       f"If you want to fix this, delete cache/studentmap.data")
